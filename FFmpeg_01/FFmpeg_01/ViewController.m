@@ -22,7 +22,9 @@
     
     // 打开视频文件
     NSString *path = [[NSBundle mainBundle] pathForResource:@"Test.mov" ofType:nil];
-    [FFmpegDemo ffmpegPlayVideoWithFile:path];
+    NSString *outPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/Test.yuv"];
+
+    [FFmpegDemo ffmpegPlayVideoWithFile:path outfile:outPath];
 }
 
 

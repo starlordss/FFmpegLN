@@ -17,7 +17,7 @@
     NSLog(@"配置信息%s",config);
 }
 
-+ (void)ffmpegPlayVideoWithFile:(NSString *)filePath
++ (void)ffmpegPlayVideoWithFile:(NSString *)filePath outfile:(NSString *)outfilePath
 {
     // 1. 注册组件
     av_register_all();
@@ -69,7 +69,7 @@
     // 4.3 根据解码器上下文，获取解码器ID，然后查找解码器
     AVCodec *avdecodec = avcodec_find_decoder(avcodec_ctx->codec_id);
     
-    // 5 打开解码器
+    // 5. 打开解码器
     int open2_result = avcodec_open2(avcodec_ctx, avdecodec, NULL);
     if (open2_result != 0) {
         NSLog(@"打开解码器失败");
@@ -123,7 +123,6 @@
                                                avcodec_ctx->height,
                                                1);
     // 开辟一块内存空间
-    
     uint8_t *out_buffer = (uint8_t *)av_malloc(buffer_size);
     // 向av_frame_yuv420p填充数据
     /**
@@ -132,8 +131,8 @@
      * 参数三：原始数据
      * 参数四：目标->格式类型
      * 参数五：宽
-     * 参数四：高
-     * 参数四：字节对齐方式->默认对齐1
+     * 参数六：高
+     * 参数七：字节对齐方式->默认对齐1
      */
     av_image_fill_arrays(avframe_yuv420p->data,
                          avframe_yuv420p->linesize,
@@ -144,15 +143,70 @@
                          1);
     int y_size, u_size, v_size;
     
-    // 将yuv420p数据写入.yuv文件中
+    // 5.2 将yuv420p数据写入.yuv文件中
     // 打开文件
-    const char *outfile = [filePath UTF8String];
+    const char *outfile = [outfilePath UTF8String];
+    NSLog(@"%s",outfile);
+    //wb+ 以读/写方式打开或建立一个二进制文件，允许读和写。
     FILE *file_yuv420p = fopen(outfile, "wb+");
     if (file_yuv420p == NULL) {
         NSLog(@"输出文件打开失败");
         return;
     }
-    int current_idxx = 0;
+    int current_idx = 0;
+    
+    while (av_read_frame(avformat_ctx, packet) >= 0) {
+        //是否是我们的视频流
+        if (packet->stream_index == av_stream_idx) {
+            // 7 解码(解码一帧压缩数据->得到视频像素数据->yuv格式)
+            // 发送一帧压缩数据
+            avcodec_send_packet(avcodec_ctx, packet);
+            // 解码一帧视频压缩数据
+            decode_result = avcodec_receive_frame(avcodec_ctx, avframe_in);
+            if (decode_result == 0) { // 解码成功
+                // 进行类型转换:将解码出来的视频像素点数据格式->统一转类型为yuv420P
+                /**
+                 * 参数一：视频像素数据格式上下文
+                 * 参数二：原来的视频像素数据格式->输入数据
+                 * 参数三：原来的视频像素数据格式->输入画面每一行大小
+                 * 参数四：原来的视频像素数据格式->输入画面每一行开始位置(填写：0->表示从原点开始读取)
+                 * 参数五：原来的视频像素数据格式->输入数据行数
+                 * 参数六：转换类型后视频像素数据格式->输出数据
+                 * 参数七：转换类型后视频像素数据格式->输出画面每一行大小
+                 */
+                sws_scale(sws_ctx,
+                          (const uint8_t *const *)avframe_in->data,
+                          avframe_in->linesize,
+                          0,
+                          avcodec_ctx->height,
+                          avframe_yuv420p->data,
+                          avframe_yuv420p->linesize);
+                // 方式一：直接显示视频上
+                // 方式二：写入yuv文件格式
+                // 将yun420p数据写入.yuv文件中:Y- 亮度 UV- 色度
+                // YUV420P格式规范一：Y结构表示一个像素(一个像素对应一个Y)
+                // YUV420P格式规范二：4个像素点对应一个(U和V: 4Y = U = V)
+                y_size = avcodec_ctx->width * avcodec_ctx->height;
+                u_size = y_size / 4;
+                v_size = y_size / 4;
+                // 写入
+                fwrite(avframe_yuv420p->data[0], 1, y_size, file_yuv420p);
+                fwrite(avframe_yuv420p->data[1], 1, y_size, file_yuv420p);
+                fwrite(avframe_yuv420p->data[2], 1, y_size, file_yuv420p);
+                
+                current_idx++;
+                NSLog(@"当前解码第%d帧", current_idx);
+            }
+        }
+    }
+    // 8 释放内存资源，关闭解码器
+    av_packet_free(&packet);
+    fclose(file_yuv420p);
+    av_frame_free(&avframe_in);
+    av_frame_free(&avframe_yuv420p);
+    free(out_buffer);
+    avcodec_close(avcodec_ctx);
+    avformat_free_context(avformat_ctx);
     
     
     

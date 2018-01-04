@@ -19,5 +19,5 @@
 @interface FFmpegDemo : NSObject
 + (void)ffmpegConfigTest;
 
-+ (void)ffmpegPlayVideoWithFile:(NSString *)filePath;
++ (void)ffmpegPlayVideoWithFile:(NSString *)filePath outfile:(NSString *)outfilePath;
 @end
